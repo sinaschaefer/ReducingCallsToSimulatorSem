@@ -75,7 +75,7 @@ x_min = torch.tensor([-1.5,-2])
 x_max = torch.tensor([0.6, 2])
 sur_prior = sutils.BoxUniform(low=x_min, high=x_max)
 
-# true_sample (i don't even know where I need this?)
+# true_sample 
 def gen_posterior_samples(obs=torch.tensor([0.0, 0.0]), prior=None, n_samples=1):
     # use opposite rotation as above
     c = 1/np.sqrt(2)
@@ -103,7 +103,6 @@ for i in range(num_budgets):
         n = budgets[i]//num_rounds
 
         # Surrogate (on all but first round)
-        """
         t1 = time.time()
         proposal = prior
         inference = SNPE(prior, density_estimator='nsf')
@@ -141,7 +140,6 @@ for i in range(num_budgets):
 
         c2st_score = c2st(true_sample[:1000,], sample_post)
         results_c2st[j,i,1] = c2st_score
-        """
 
         # support points
         t3 = time.time()
@@ -158,34 +156,34 @@ for i in range(num_budgets):
             proposal = posterior.set_default_x(x_obs)
 
         sample_post1 = posterior.sample((1000,), x=x_obs)
-        #t4 = time.time()
+        t4 = time.time()
         save_sample(sample_post1, f"sp_{n}_{j}")
 
-        #mmd = MMD2(true_sample[:1000,:], sample_post1)
-        #results_mmd[j,i,2] = mmd
+        mmd = MMD2(true_sample[:1000,:], sample_post1)
+        results_mmd[j,i,2] = mmd
 
         c2st_score = c2st(true_sample[:1000,], sample_post1)
         results_c2st[j,i,2] = c2st_score
 
-        #timings[j,i,1] = t2 - t1
-        #timings[j,i,2] = t4 - t3
+        timings[j,i,1] = t2 - t1
+        timings[j,i,2] = t4 - t3
 
-        #torch.save(results_mmd, f'{path}/0res_mmd.pkl')
+        torch.save(results_mmd, f'{path}/0res_mmd.pkl')
         torch.save(results_c2st, f'{path}/1res_c2st.pkl')
-        #torch.save(timings, f'{path}/timings.pkl')
+        torch.save(timings, f'{path}/timings.pkl')
 
-#mmd_means = results_mmd.nanmean(dim=0)
+mmd_means = results_mmd.nanmean(dim=0)
 c2st_means = results_c2st.nanmean(dim=0)
-#timings_means = timings.nanmean(dim=0)
+timings_means = timings.nanmean(dim=0)
 
-#np.savetxt(f'{path}/0mmd_means.csv', mmd_means.numpy(), delimiter=",")
+np.savetxt(f'{path}/0mmd_means.csv', mmd_means.numpy(), delimiter=",")
 np.savetxt(f'{path}/1c2st_means.csv', c2st_means.numpy(), delimiter=",")
-#np.savetxt(f'{path}/timings_means.csv', timings_means.numpy(), delimiter=",")
+np.savetxt(f'{path}/timings_means.csv', timings_means.numpy(), delimiter=",")
 
-#mmd_vars = results_mmd.var(dim=0)
+mmd_vars = results_mmd.var(dim=0)
 c2st_vars = results_c2st.var(dim=0)
-#timings_vars = timings.var(dim=0)
+timings_vars = timings.var(dim=0)
 
-#np.savetxt(f'{path}/0mmd_vars.csv', mmd_vars.numpy(), delimiter=",")
+np.savetxt(f'{path}/0mmd_vars.csv', mmd_vars.numpy(), delimiter=",")
 np.savetxt(f'{path}/1c2st_vars.csv',c2st_vars.numpy(), delimiter=",")
-#np.savetxt(f'{path}/timings_vars.csv',timings_vars.numpy(), delimiter=",")
+np.savetxt(f'{path}/timings_vars.csv',timings_vars.numpy(), delimiter=",")

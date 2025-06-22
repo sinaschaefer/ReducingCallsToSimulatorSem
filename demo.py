@@ -21,7 +21,7 @@ from metrics import *
 from classifier import c2st
 from SupportPoints import *
 
-# task specific things (because the fucking import doesn't work)
+# task specific things 
 # different budgets tested
 budgets = [200]
 
@@ -97,13 +97,35 @@ def gen_posterior_samples(obs=torch.tensor([0.0, 0.0]), prior=None, n_samples=1)
     
 true_sample = gen_posterior_samples(n_samples=1000)
 
-# surrogate method implementation 
+# implementation of different methods and standard SNPE
 for i in range(num_budgets):
     for j in range(num_simulations):
         n = budgets[i]//num_rounds
 
-        # Surrogate (on all but first round)
+        # Regular SNPE
+        t0 = time.time()
+        proposal = prior
+        inference = SNPE(prior, density_estimator='nsf')
+
+        for _ in range(num_rounds):    
+            theta = proposal.sample((n,))
+            x_sim = simulator(theta)
+            density_estimator = inference.append_simulations(theta, x_sim, proposal).train()
+            posterior = inference.build_posterior(density_estimator)
+            proposal = posterior.set_default_x(x_obs)
+
+        sample_post1 = posterior.sample((1000,), x=x_obs)
         t1 = time.time()
+        save_sample(sample_post1, f"reg_{n}_{j}")
+
+        mmd = MMD2(true_sample[:1000,:], sample_post1)
+        results_mmd[j,i,0] = mmd
+
+        c2st_score = c2st(true_sample[:1000,], sample_post1)
+        results_c2st[j,i,0] = c2st_score
+
+        # Surrogate (on all but first round)
+        t2= time.time()
         proposal = prior
         inference = SNPE(prior, density_estimator='nsf')
         for k in range(num_rounds):
@@ -112,7 +134,7 @@ for i in range(num_budgets):
                 theta = proposal.sample((n * num_rounds,))
                 x_sim = simulator(theta)
 
-                # train surrogate
+                # train surrogate NDE
                 inference2 = SNPE(sur_prior, density_estimator='nsf')
                 density_estimator = inference2.append_simulations(theta=x_sim, x=theta).train()
                 surrogate = inference2.build_posterior(density_estimator)
@@ -131,18 +153,18 @@ for i in range(num_budgets):
             proposal = posterior.set_default_x(x_obs)
 
 
-        sample_post = posterior.sample((1000,), x=x_obs)
-        t2 = time.time()
-        save_sample(sample_post, f"sur_{n}_{j}")
+        sample_post2 = posterior.sample((1000,), x=x_obs)
+        t3 = time.time()
+        save_sample(sample_post2, f"sur_{n}_{j}")
 
-        mmd = MMD2(true_sample[:1000,:], sample_post)
+        mmd = MMD2(true_sample[:1000,:], sample_post2)
         results_mmd[j,i,1] = mmd
 
-        c2st_score = c2st(true_sample[:1000,], sample_post)
+        c2st_score = c2st(true_sample[:1000,], sample_post2)
         results_c2st[j,i,1] = c2st_score
 
         # support points
-        t3 = time.time()
+        t4 = time.time()
         proposal = prior
         inference = SNPE(prior, density_estimator='nsf')
 
@@ -155,18 +177,60 @@ for i in range(num_budgets):
             posterior = inference.build_posterior(density_estimator)
             proposal = posterior.set_default_x(x_obs)
 
-        sample_post1 = posterior.sample((1000,), x=x_obs)
-        t4 = time.time()
-        save_sample(sample_post1, f"sp_{n}_{j}")
+        sample_post3 = posterior.sample((1000,), x=x_obs)
+        t5 = time.time()
+        save_sample(sample_post3, f"sp_{n}_{j}")
 
-        mmd = MMD2(true_sample[:1000,:], sample_post1)
+        mmd = MMD2(true_sample[:1000,:], sample_post3)
         results_mmd[j,i,2] = mmd
 
-        c2st_score = c2st(true_sample[:1000,], sample_post1)
+        c2st_score = c2st(true_sample[:1000,], sample_post3)
         results_c2st[j,i,2] = c2st_score
 
-        timings[j,i,1] = t2 - t1
-        timings[j,i,2] = t4 - t3
+        # Mixed method: surrogate + support points
+        t6 = time.time()
+        proposal = prior
+        inference = SNPE(prior, density_estimator='nsf')
+
+        for k in range(num_rounds):
+            # 1st iteration use real simulator; use support points as simulator input
+            if k == 0:
+                theta = proposal.sample((n * num_rounds * 2,))
+                theta_ss, _ = do_ccp(theta, n * num_rounds)
+                theta_ss_ = constrain_points(theta_ss, proposal).reshape(-1, theta_dim)
+                x_sim = simulator(theta_ss_)
+
+                # train surrogate
+                inference2 = SNPE(sur_prior, density_estimator='nsf')
+                density_estimator = inference2.append_simulations(theta=x_sim, x=theta).train() # x and theta switch roles
+                surrogate = inference2.build_posterior(density_estimator)
+            
+            # otherr itarations use surroate
+            else:
+                theta = proposal.sample((n * num_rounds * 10,))
+                x_sim = torch.zeros(theta.shape[0], x_dim)
+                for l in range(len(theta)):
+                    x_sim[l] = surrogate.sample((1,), x=theta[l,:], show_progress_bars=False)
+            
+            density_estimator = inference.append_simulations(theta, x_sim, proposal).train()
+            posterior = inference.build_posterior(density_estimator)
+            proposal= posterior.set_default_x(x_obs)
+        
+        sample_post4 = posterior.sample((1000,), x=x_obs)
+        t7 = time.time()
+        save_sample(sample_post4, f"mix_{n}_{j}")
+
+        mmd = MMD2(true_sample[:1000,:], sample_post4)
+        results_mmd[j,i,3] = mmd
+
+        c2st_score = c2st(true_sample[:1000,], sample_post4)
+        results_c2st[j,i,3] = c2st_score
+
+
+        timings[j,i,0] = t1 - t0
+        timings[j,i,1] = t3 - t2
+        timings[j,i,2] = t5 - t4
+        timings[j,i,3] = t7 - t6
 
         torch.save(results_mmd, f'{path}/0res_mmd.pkl')
         torch.save(results_c2st, f'{path}/1res_c2st.pkl')

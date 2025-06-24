@@ -21,10 +21,10 @@ from metrics import *
 from classifier import c2st
 from SupportPoints import *
 
-# task specific things 
 # different budgets tested
 budgets = [200]
 
+# task specific things 
 # hyper parameters and other vars
 num_budgets = len(budgets)
 num_simulations = 10
@@ -163,7 +163,7 @@ for i in range(num_budgets):
         c2st_score = c2st(true_sample[:1000,], sample_post2)
         results_c2st[j,i,1] = c2st_score
 
-        # support points
+        # support points in every round
         t4 = time.time()
         proposal = prior
         inference = SNPE(prior, density_estimator='nsf')
@@ -197,8 +197,8 @@ for i in range(num_budgets):
             if k == 0:
                 theta = proposal.sample((n * num_rounds * 2,))
                 theta_ss, _ = do_ccp(theta, n * num_rounds)
-                theta_ss_ = constrain_points(theta_ss, proposal).reshape(-1, theta_dim)
-                x_sim = simulator(theta_ss_)
+                theta = constrain_points(theta_ss, proposal).reshape(-1, theta_dim)
+                x_sim = simulator(theta)
 
                 # train surrogate
                 inference2 = SNPE(sur_prior, density_estimator='nsf')
@@ -226,7 +226,7 @@ for i in range(num_budgets):
         c2st_score = c2st(true_sample[:1000,], sample_post4)
         results_c2st[j,i,3] = c2st_score
 
-
+        # calculate timimgs of different methods
         timings[j,i,0] = t1 - t0
         timings[j,i,1] = t3 - t2
         timings[j,i,2] = t5 - t4
@@ -236,6 +236,7 @@ for i in range(num_budgets):
         torch.save(results_c2st, f'{path}/1res_c2st.pkl')
         torch.save(timings, f'{path}/timings.pkl')
 
+# save the mean and variances for each metric in the corresponding files
 mmd_means = results_mmd.nanmean(dim=0)
 c2st_means = results_c2st.nanmean(dim=0)
 timings_means = timings.nanmean(dim=0)
